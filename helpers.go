@@ -1,51 +1,44 @@
-package mymodule
+package shifts
 
 import (
+	"context"
 	"fmt"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"go.edgescale.dev/kernel/sdk"
 )
 
-// ── UUID parsing ──────────────────────────────────────────────────────────────
+// ── Context helpers ───────────────────────────────────────────────────────────
 
-// parseUUID extracts and validates a UUID route parameter.
+// tenantID extracts the tenant UUID from the Gin context.
+// Set by the kernel's resolveTenant middleware on tenant-scoped routes.
+func tenantID(c *gin.Context) uuid.UUID {
+	return c.MustGet("tenant_id").(uuid.UUID)
+}
+
+// parseUUID extracts a UUID from a URL parameter. Returns an error response
+// and a zero UUID if parsing fails.
 func parseUUID(c *gin.Context, param string) (uuid.UUID, error) {
 	raw := c.Param(param)
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		sdk.Error(c, sdk.BadRequest(fmt.Sprintf("invalid %s: must be a UUID", param)))
+		sdk.Error(c, sdk.BadRequest(fmt.Sprintf("invalid UUID for %s: %s", param, raw)))
 		return uuid.Nil, err
 	}
 	return id, nil
 }
 
-// ── Context helpers ───────────────────────────────────────────────────────────
-// These centralize context key extraction so changes to the kernel's
-// context keys only require updates in one place.
-
-// tenantID extracts the tenant UUID from the gin context.
-// Set by the kernel's tenant middleware for tenant-scoped routes.
-func tenantID(c *gin.Context) uuid.UUID {
-	return get(c, "tenant_id")
+// parseDate parses a "YYYY-MM-DD" date string.
+func parseDate(s string) (time.Time, error) {
+	return time.Parse("2006-01-02", s)
 }
 
-// userID extracts the authenticated user's UUID from the gin context.
-// Set by the kernel's auth middleware.
-func userID(c *gin.Context) uuid.UUID {
-	return get(c, "internal_user_id")
-}
+// ── IAM Reader interface ──────────────────────────────────────────────────────
 
-func get(c *gin.Context, key string) uuid.UUID {
-	_id, ok := c.Get(key)
-	if !ok {
-		return uuid.Nil
-	}
-
-	id, ok := _id.(uuid.UUID)
-	if !ok {
-		return uuid.Nil
-	}
-	return id
+// iamMemberReader is the expected interface from the IAM module's reader.
+// We define it locally to avoid importing the IAM module directly.
+type iamMemberReader interface {
+	GetMemberUserID(ctx context.Context, tenantMemberID uuid.UUID) (uuid.UUID, error)
 }

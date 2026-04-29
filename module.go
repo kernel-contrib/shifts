@@ -1,19 +1,22 @@
-package mymodule
+package shifts
 
 import (
 	"io/fs"
+	"time"
 
-	"go.edgescale.dev/kernel-contrib/mymodule/internal"
-	"go.edgescale.dev/kernel-contrib/mymodule/migrations"
+	"github.com/kernel-contrib/shifts/internal"
+	"github.com/kernel-contrib/shifts/migrations"
 	"go.edgescale.dev/kernel/sdk"
 )
 
-// Module is the main entry point for the mymodule kernel module.
-// TODO: Replace "mymodule" with your module name throughout this file.
+// Module is the main entry point for the shifts kernel module.
+// It acts as a declarative scheduler — defines when/where people work,
+// decoupled from physical attendance recording.
 type Module struct {
-	ctx  sdk.Context
-	repo *internal.Repository
-	svc  *internal.Service
+	ctx            sdk.Context
+	repo           *internal.Repository
+	svc            *internal.Service
+	reminderTicker *time.Ticker
 }
 
 // New constructs the module.
@@ -22,90 +25,132 @@ func New() *Module {
 }
 
 // Manifest returns immutable metadata for this module.
-// The kernel reads this at startup to register routes, permissions, events, etc.
 func (m *Module) Manifest() sdk.Manifest {
 	return sdk.Manifest{
-		// ID is the unique identifier for this module. Must be lowercase, no spaces.
-		// Other modules reference this when calling sdk.Reader[YourReader](&ctx, "mymodule").
-		ID: "mymodule",
+		ID:          "shifts",
+		Type:        sdk.TypeFeature,
+		Schema:      "module_shifts",
+		Name:        "Shifts",
+		Description: "Declarative shift scheduling engine — defines when and where employees work",
+		Version:     "1.0.0",
+		DependsOn:   []string{"iam"},
 
-		// Type declares the module's role. Options:
-		//   sdk.TypeCore     — core infrastructure module (IAM, billing, etc.)
-		//   sdk.TypeFeature  — feature module (most modules use this)
-		Type: sdk.TypeFeature,
-
-		// Schema is the prefix for database tables. The kernel's migration runner uses
-		// this to namespace migrations. Convention: "module_<id>"
-		Schema: "module_mymodule",
-
-		// Display metadata for admin panel.
-		Name:        "My Module",
-		Description: "A brief description of what this module does",
-		Version:     "0.1.0",
-
-		// Permissions define granular access keys for RBAC.
-		// Convention: "<module_id>.<resource>.<action>"
 		Permissions: []sdk.Permission{
-			{Key: "mymodule.items.read", Label: sdk.T("View items", "ar", "عرض العناصر")},
-			{Key: "mymodule.items.manage", Label: sdk.T("Create, update, and delete items", "ar", "إنشاء وتعديل وحذف العناصر")},
+			{Key: "shifts.shifts.read", Label: sdk.T("View shifts", "ar", "عرض الورديات")},
+			{Key: "shifts.shifts.manage", Label: sdk.T("Create, update, and delete shifts", "ar", "إنشاء وتعديل وحذف الورديات")},
+			{Key: "shifts.members.read", Label: sdk.T("View shift assignments", "ar", "عرض تعيينات الورديات")},
+			{Key: "shifts.members.manage", Label: sdk.T("Assign and remove shift members", "ar", "تعيين وإزالة أعضاء الورديات")},
+			{Key: "shifts.overrides.read", Label: sdk.T("View shift overrides", "ar", "عرض استثناءات الورديات")},
+			{Key: "shifts.overrides.manage", Label: sdk.T("Create, update, and delete overrides", "ar", "إنشاء وتعديل وحذف الاستثناءات")},
+			{Key: "shifts.roster.read", Label: sdk.T("View team roster", "ar", "عرض جدول الفريق")},
 		},
 
-		// PublicEvents are events this module publishes to the outbox.
-		// Other modules can subscribe to these via hooks or event listeners.
 		PublicEvents: []sdk.EventDef{
-			{Subject: "mymodule.item.created", Description: sdk.T("A new item was created")},
-			{Subject: "mymodule.item.updated", Description: sdk.T("An item was updated")},
-			{Subject: "mymodule.item.deleted", Description: sdk.T("An item was deleted")},
+			{Subject: "shifts.shift.created", Description: sdk.T("A new shift was created")},
+			{Subject: "shifts.shift.updated", Description: sdk.T("A shift was updated")},
+			{Subject: "shifts.shift.deleted", Description: sdk.T("A shift was deleted")},
+			{Subject: "shifts.member.assigned", Description: sdk.T("A member was assigned to a shift")},
+			{Subject: "shifts.member.removed", Description: sdk.T("A member was removed from a shift")},
+			{Subject: "shifts.override.created", Description: sdk.T("A shift override was created")},
+			{Subject: "shifts.override.updated", Description: sdk.T("A shift override was updated")},
+			{Subject: "shifts.override.deleted", Description: sdk.T("A shift override was deleted")},
+			{Subject: "shifts.reminder.dispatch", Description: sdk.T("A shift reminder should be sent")},
 		},
 
-		// Config defines user-configurable settings for this module.
-		// These appear in the admin panel and are read via ctx.Config.Get().
 		Config: []sdk.ConfigFieldDef{
 			{
-				Key:     "mymodule.max_items",
-				Type:    "number",
-				Default: "100",
-				Label:   sdk.T("Maximum items per tenant", "ar", "الحد الأقصى للعناصر لكل مستأجر"),
+				Key:     "shifts.allow_overlapping_assignments",
+				Type:    "bool",
+				Default: "false",
+				Label:   sdk.T("Allow overlapping assignments", "ar", "السماح بالتعيينات المتداخلة"),
 				Description: sdk.T(
-					"The maximum number of items allowed per tenant.",
-					"ar", "الحد الأقصى لعدد العناصر المسموح بها لكل مستأجر.",
+					"Allow a member to be assigned to multiple shifts with overlapping days within the same business. Cross-business conflicts are always blocked.",
+					"ar", "السماح بتعيين عضو في ورديات متعددة ذات أيام متداخلة ضمن نفس العمل. التعارضات عبر الأعمال محظورة دائماً.",
+				),
+			},
+			{
+				Key:     "shifts.reminder_minutes",
+				Type:    "text",
+				Default: "[30,15,1]",
+				Label:   sdk.T("Reminder intervals (minutes)", "ar", "فترات التذكير (دقائق)"),
+				Description: sdk.T(
+					"JSON array of minutes before shift start to send reminders. The 30-minute reminder always fires regardless of this setting.",
+					"ar", "مصفوفة JSON بالدقائق قبل بدء الوردية لإرسال التذكيرات. تذكير الـ 30 دقيقة يعمل دائماً بغض النظر عن هذا الإعداد.",
+				),
+			},
+			{
+				Key:     "shifts.early_checkin_allowance_mins",
+				Type:    "number",
+				Default: "5",
+				Label:   sdk.T("Early check-in allowance (minutes)", "ar", "السماح بالحضور المبكر (دقائق)"),
+				Description: sdk.T(
+					"Tenant-wide default: minutes before shift start a check-in is accepted. Can be overridden per shift.",
+					"ar", "الافتراضي على مستوى المنشأة: الدقائق قبل بدء الوردية لقبول تسجيل الحضور. يمكن تجاوزه لكل وردية.",
+				),
+			},
+			{
+				Key:     "shifts.late_checkin_grace_mins",
+				Type:    "number",
+				Default: "5",
+				Label:   sdk.T("Late check-in grace (minutes)", "ar", "فترة سماح التأخر بالحضور (دقائق)"),
+				Description: sdk.T(
+					"Tenant-wide default: minutes after shift start before marking as late. Can be overridden per shift.",
+					"ar", "الافتراضي على مستوى المنشأة: الدقائق بعد بدء الوردية قبل اعتباره متأخراً. يمكن تجاوزه لكل وردية.",
+				),
+			},
+			{
+				Key:     "shifts.early_checkout_allowance_mins",
+				Type:    "number",
+				Default: "5",
+				Label:   sdk.T("Early check-out allowance (minutes)", "ar", "السماح بالانصراف المبكر (دقائق)"),
+				Description: sdk.T(
+					"Tenant-wide default: minutes before shift end a check-out is accepted. Can be overridden per shift.",
+					"ar", "الافتراضي على مستوى المنشأة: الدقائق قبل نهاية الوردية لقبول تسجيل الانصراف. يمكن تجاوزه لكل وردية.",
+				),
+			},
+			{
+				Key:     "shifts.late_checkout_allowance_mins",
+				Type:    "number",
+				Default: "5",
+				Label:   sdk.T("Late check-out allowance (minutes)", "ar", "السماح بالانصراف المتأخر (دقائق)"),
+				Description: sdk.T(
+					"Tenant-wide default: minutes after shift end a check-out is accepted. Can be overridden per shift.",
+					"ar", "الافتراضي على مستوى المنشأة: الدقائق بعد نهاية الوردية لقبول تسجيل الانصراف. يمكن تجاوزه لكل وردية.",
 				),
 			},
 		},
 
-		// UINav defines sidebar navigation items for the admin panel.
 		UINav: []sdk.NavItem{
-			{Label: sdk.T("Items", "ar", "العناصر"), Icon: "list", Path: "/mymodule/items", Permission: "mymodule.items.read", SortOrder: 1},
+			{Label: sdk.T("Shifts", "ar", "الورديات"), Icon: "calendar_month", Path: "/shifts", Permission: "shifts.shifts.read", SortOrder: 1},
 		},
 	}
 }
 
 // Migrations returns the embedded SQL migration files.
-// The kernel reads these at startup and applies them in order.
 func (m *Module) Migrations() fs.FS {
 	return migrations.FS
 }
 
-// Init wires the module's internal services. Called once at startup by the kernel.
-// Use this to initialize repositories, services, and register readers.
+// Init wires the module's internal services.
 func (m *Module) Init(ctx sdk.Context) error {
 	m.ctx = ctx
 	m.repo = internal.NewRepository(ctx.DB)
+	m.svc = internal.NewService(m.repo, ctx.Bus, ctx.Redis, ctx.Config, ctx.Logger)
 
-	m.svc = internal.NewService(m.repo, ctx.Bus, ctx.Redis, ctx.Logger)
-
-	// Register a reader so other modules can consume your data.
-	// Other modules resolve it via: sdk.Reader[mymodule.MyModuleReader](&ctx, "mymodule")
-	ctx.RegisterReader(&moduleReader{
-		repo: m.repo,
+	// Register cross-module reader.
+	ctx.RegisterReader(&shiftsReader{
+		svc: m.svc,
 	})
 
-	ctx.Logger.Info("mymodule initialized")
+	// Start the smart reminders cron.
+	m.startReminderCron()
+
+	ctx.Logger.Info("shifts module initialized")
 	return nil
 }
 
 // Shutdown performs cleanup before the kernel stops.
-// Close connections, flush buffers, etc.
 func (m *Module) Shutdown() error {
+	m.stopReminderCron()
 	return nil
 }

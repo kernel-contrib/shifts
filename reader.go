@@ -1,36 +1,48 @@
-package mymodule
+package shifts
 
 import (
 	"context"
+	"time"
 
 	"github.com/google/uuid"
-	"go.edgescale.dev/kernel-contrib/mymodule/internal"
-	"go.edgescale.dev/kernel-contrib/mymodule/types"
+	"github.com/kernel-contrib/shifts/internal"
+	"github.com/kernel-contrib/shifts/types"
 )
 
 // ── Reader interface ──────────────────────────────────────────────────────────
 
-// MyModuleReader is the cross-module reader interface.
+// ShiftsReader is the cross-module reader interface.
 // Other modules consume this via:
 //
-//	reader, err := sdk.Reader[mymodule.MyModuleReader](&m.ctx, "mymodule")
+//	reader, err := sdk.Reader[shifts.ShiftsReader](&m.ctx, "shifts")
 //
 // Rules:
 //   - All methods MUST be read-only (no writes, no events).
 //   - Always scope queries by tenant to prevent cross-tenant data leaks.
 //   - Resolve readers lazily in handlers, NEVER in Init().
-//   - Optional: back with Redis cache for performance.
-type MyModuleReader interface {
-	GetItem(ctx context.Context, id uuid.UUID) (*types.Item, error)
+type ShiftsReader interface {
+	// GetShiftForDay returns the resolved effective shift for a member on a date.
+	// Applies override hierarchy: member-specific → shift-wide → base rules.
+	// Returns nil (no error) if the member has no shift that day.
+	GetShiftForDay(ctx context.Context, tenantID, memberID uuid.UUID, date time.Time) (*types.ResolvedShift, error)
+
+	// GetShiftsStartingWithinHour returns all resolved shifts across all tenants
+	// that start within the next 60 minutes from `now`.
+	// Used by the reminders cron to determine which notifications to fire.
+	GetShiftsStartingWithinHour(ctx context.Context, now time.Time) ([]types.ResolvedShift, error)
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
 
-// moduleReader is the unexported implementation registered with the kernel.
-type moduleReader struct {
-	repo *internal.Repository
+// shiftsReader is the unexported implementation registered with the kernel.
+type shiftsReader struct {
+	svc *internal.Service
 }
 
-func (r *moduleReader) GetItem(ctx context.Context, id uuid.UUID) (*types.Item, error) {
-	return r.repo.FindItemByID(ctx, id)
+func (r *shiftsReader) GetShiftForDay(ctx context.Context, tenantID, memberID uuid.UUID, date time.Time) (*types.ResolvedShift, error) {
+	return r.svc.ResolveShiftForDay(ctx, tenantID, memberID, date)
+}
+
+func (r *shiftsReader) GetShiftsStartingWithinHour(ctx context.Context, now time.Time) ([]types.ResolvedShift, error) {
+	return r.svc.GetShiftsStartingWithinHour(ctx, now)
 }
