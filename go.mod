@@ -1,12 +1,13 @@
-module go.edgescale.dev/kernel-contrib/mymodule
+module github.com/kernel-contrib/shifts
 
 go 1.26.1
 
 require (
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
+	github.com/kernel-contrib/iam v0.0.0-20260430012052-a0812526fc09
 	github.com/stretchr/testify v1.11.1
-	go.edgescale.dev/kernel v0.1.2
+	go.edgescale.dev/kernel v0.2.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
 )

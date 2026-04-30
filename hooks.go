@@ -1,4 +1,4 @@
-package mymodule
+package shifts
 
 import (
 	"context"
@@ -10,20 +10,7 @@ import (
 )
 
 // RegisterHooks subscribes to kernel lifecycle hooks.
-//
-// Hook naming convention:
-//   - "before.<module>.<resource>.<action>" — fired before an action, can abort
-//   - "after.<module>.<resource>.<action>"  — fired after an action, informational
-//
-// Common kernel hooks to subscribe to:
-//   - "after.kernel.tenant.provisioned" — seed data when a new tenant is provisioned
-//   - "before.kernel.tenant.deleted"    — guard or cleanup before tenant deletion
-//
-// Your module can also EMIT hooks so other modules can intercept your operations:
-//   - "before.mymodule.item.deleted"  — allow other modules to block deletion
-//   - "after.mymodule.item.created"   — notify other modules after creation
 func (m *Module) RegisterHooks(hooks *sdk.HookRegistry) {
-	// Subscribe to kernel tenant provisioning to seed initial data.
 	hooks.After("after.kernel.tenant.provisioned", m.onTenantProvisioned)
 }
 
@@ -35,28 +22,28 @@ type tenantProvisionedPayload struct {
 	UserID   uuid.UUID `json:"user_id"`
 }
 
-// onTenantProvisioned seeds initial data when the kernel provisions a new tenant.
+// onTenantProvisioned seeds default configuration when a new tenant is provisioned.
 func (m *Module) onTenantProvisioned(ctx context.Context, payload any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("mymodule: marshal hook payload: %w", err)
+		return fmt.Errorf("shifts: marshal hook payload: %w", err)
 	}
 
 	var p tenantProvisionedPayload
 	if err := json.Unmarshal(data, &p); err != nil {
-		return fmt.Errorf("mymodule: unmarshal hook payload: %w", err)
+		return fmt.Errorf("shifts: unmarshal hook payload: %w", err)
 	}
 
 	if p.TenantID == uuid.Nil {
-		return fmt.Errorf("mymodule: tenant.provisioned hook: missing tenant_id")
+		return fmt.Errorf("shifts: tenant.provisioned hook: missing tenant_id")
 	}
 
-	m.ctx.Logger.Info("seeding initial data for new tenant",
+	m.ctx.Logger.Info("shifts: seeding defaults for new tenant",
 		"tenant_id", p.TenantID,
 	)
 
-	// TODO: Add your tenant provisioning logic here.
-	// Example: create default items, seed configuration, etc.
+	// Default configuration is handled by the Manifest Config defaults.
+	// No additional seeding needed at this time.
 
 	return nil
 }

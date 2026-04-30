@@ -1,43 +1,39 @@
-package mymodule
+package shifts
 
 import "go.edgescale.dev/kernel/sdk"
 
-// RegisterRoutes mounts all HTTP endpoints on the kernel router.
-//
-// Routes are split into two groups:
-//   - Global: authenticated, not tenant-scoped (/v1/mymodule/...)
-//   - Tenant-scoped: require tenant context (/v1/:tenant_id/mymodule/...)
-//
-// Route types:
-//   - sdk.RouteClient  — client-facing API (standard auth middleware)
-//   - sdk.RoutePlatform — platform admin API (platform-level auth)
-func (m *Module) RegisterRoutes(router *sdk.Router) []sdk.RouteHandler {
+// RouteHandlers returns the route handler registrations for this module.
+func (m *Module) RouteHandlers() []sdk.RouteHandler {
 	return []sdk.RouteHandler{
-		{
-			Type: sdk.RouteClient, Register: m.registerClientRoutes,
-		},
-		// Uncomment to add platform admin routes:
-		// {
-		// 	Type: sdk.RoutePlatform, Register: m.registerPlatformRoutes,
-		// },
+		{Type: sdk.RouteClient, Register: m.registerClientRoutes},
 	}
 }
 
-func (m *Module) registerClientRoutes(router *sdk.Router) {
-	// ── Global routes (not tenant-scoped) ─────────────────────────────────
-	// These do not require a tenant context.
-	// Permission "self" means any authenticated user can access.
-	// Permission "public" means no auth required.
+func (m *Module) registerClientRoutes(r *sdk.Router) {
+	// Tenant-scoped routes
+	t := r.Tenant()
 
-	// ── Tenant-scoped routes ──────────────────────────────────────────────
-	// router.Tenant() returns a sub-router that automatically scopes
-	// routes under /v1/:tenant_id/mymodule/...
-	// The tenant_id is extracted by the kernel middleware and available
-	// via the tenantID(c) helper.
-	t := router.Tenant()
-	t.GET("/items", "mymodule.items.read", m.handleListItems)
-	t.POST("/items", "mymodule.items.manage", m.handleCreateItem)
-	t.GET("/items/:id", "mymodule.items.read", m.handleGetItem)
-	t.PATCH("/items/:id", "mymodule.items.manage", m.handleUpdateItem)
-	t.DELETE("/items/:id", "mymodule.items.manage", m.handleDeleteItem)
+	// Shifts CRUD.
+	t.GET("/shifts", "shifts.shifts.read", m.handleListShifts)
+	t.POST("/shifts", "shifts.shifts.manage", m.handleCreateShift)
+	t.GET("/shifts/:id", "shifts.shifts.read", m.handleGetShift)
+	t.PUT("/shifts/:id", "shifts.shifts.manage", m.handleUpdateShift)
+	t.DELETE("/shifts/:id", "shifts.shifts.manage", m.handleDeleteShift)
+
+	// Members.
+	t.GET("/shifts/:id/members", "shifts.members.read", m.handleListMembers)
+	t.POST("/shifts/:id/members", "shifts.members.manage", m.handleAssignMembers)
+	t.DELETE("/shifts/:id/members/:member_id", "shifts.members.manage", m.handleRemoveMember)
+
+	// Overrides.
+	t.GET("/shifts/:id/overrides", "shifts.overrides.read", m.handleListOverrides)
+	t.POST("/shifts/:id/overrides", "shifts.overrides.manage", m.handleCreateOverrides)
+	t.PUT("/overrides/:id", "shifts.overrides.manage", m.handleUpdateOverride)
+	t.DELETE("/overrides/:id", "shifts.overrides.manage", m.handleDeleteOverride)
+
+	// Roster (manager view).
+	t.GET("/roster", "shifts.roster.read", m.handleGetRoster)
+
+	// My Schedule - employee self-view (authenticated, tenant-scoped).
+	t.GET("/my-schedule", sdk.Self, m.handleMySchedule)
 }
