@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	iamtypes "github.com/kernel-contrib/iam/types"
 	"github.com/kernel-contrib/shifts/internal"
 	"github.com/kernel-contrib/shifts/types"
 	"go.edgescale.dev/kernel/sdk"
@@ -248,6 +249,12 @@ func (m *Module) handleDeleteShift(c *gin.Context) {
 
 // ── Member Handlers ───────────────────────────────────────────────────────────
 
+// enrichedMember wraps a ShiftMember with optional IAM profile data.
+type enrichedMember struct {
+	types.ShiftMember
+	Member *iamtypes.TenantMember `json:"member,omitempty"`
+}
+
 func (m *Module) handleListMembers(c *gin.Context) {
 	tid := tenantID(c)
 	shiftID, err := parseUUID(c, "id")
@@ -261,7 +268,35 @@ func (m *Module) handleListMembers(c *gin.Context) {
 		return
 	}
 
-	sdk.OK(c, members)
+	// Enrich with IAM member profiles (best-effort).
+	iamReader, iamErr := sdk.Reader[iamMemberReader](&m.ctx, "iam")
+	var profiles map[uuid.UUID]iamtypes.TenantMember
+	if iamErr != nil {
+		m.ctx.Logger.Warn("IAM reader unavailable, members will not be enriched",
+			"error", iamErr)
+	} else if len(members) > 0 {
+		ids := make([]uuid.UUID, len(members))
+		for i, sm := range members {
+			ids[i] = sm.TenantMemberID
+		}
+		profiles, err = iamReader.GetMembersByIDs(c.Request.Context(), tid, ids)
+		if err != nil {
+			m.ctx.Logger.Warn("failed to enrich shift members from IAM",
+				"shift_id", shiftID, "error", err)
+		}
+	}
+
+	result := make([]enrichedMember, len(members))
+	for i, sm := range members {
+		result[i] = enrichedMember{ShiftMember: sm}
+		if profiles != nil {
+			if p, ok := profiles[sm.TenantMemberID]; ok {
+				result[i].Member = &p
+			}
+		}
+	}
+
+	sdk.OK(c, result)
 }
 
 func (m *Module) handleAssignMembers(c *gin.Context) {
@@ -297,33 +332,39 @@ func (m *Module) handleAssignMembers(c *gin.Context) {
 		effectiveTo = &et
 	}
 
-	// Resolve each tenant_member_id → user_id via IAM reader.
-	// The IAM reader provides the global user identity needed for cross-tenant conflict detection.
+	// Resolve tenant_member_id -> user_id via IAM reader (batch).
+	// The global user_id is needed for cross-tenant conflict detection.
 	iamReader, iamErr := sdk.Reader[iamMemberReader](&m.ctx, "iam")
+	userIDMap := make(map[uuid.UUID]uuid.UUID) // tenant_member_id -> user_id
+	if iamErr != nil {
+		m.ctx.Logger.Warn("IAM reader unavailable, using tenant_member_id as user_id fallback",
+			"error", iamErr)
+		for _, id := range req.MemberIDs {
+			userIDMap[id] = id
+		}
+	} else {
+		profiles, err := iamReader.GetMembersByIDs(c.Request.Context(), tid, req.MemberIDs)
+		if err != nil {
+			sdk.Error(c, sdk.BadRequest(fmt.Sprintf("could not resolve members: %v", err)))
+			return
+		}
+		for _, memberID := range req.MemberIDs {
+			p, ok := profiles[memberID]
+			if !ok {
+				sdk.Error(c, sdk.BadRequest(fmt.Sprintf("member %s not found", memberID)))
+				return
+			}
+			userIDMap[memberID] = p.UserID
+		}
+	}
 
 	var assigned []types.ShiftMember
 	for _, memberID := range req.MemberIDs {
-		// Resolve user_id from IAM.
-		var userID uuid.UUID
-		if iamErr == nil {
-			uid, err := iamReader.GetMemberUserID(c.Request.Context(), memberID)
-			if err != nil {
-				sdk.Error(c, sdk.BadRequest(fmt.Sprintf("could not resolve user for member %s", memberID)))
-				return
-			}
-			userID = uid
-		} else {
-			// Fallback: use tenant_member_id as user_id (development/testing).
-			m.ctx.Logger.Warn("IAM reader unavailable, using tenant_member_id as user_id fallback",
-				"tenant_member_id", memberID)
-			userID = memberID
-		}
-
 		member, err := m.svc.AssignMember(c.Request.Context(), internal.AssignMemberInput{
 			TenantID:       tid,
 			ShiftID:        shiftID,
 			TenantMemberID: memberID,
-			UserID:         userID,
+			UserID:         userIDMap[memberID],
 			EffectiveFrom:  effectiveFrom,
 			EffectiveTo:    effectiveTo,
 		})

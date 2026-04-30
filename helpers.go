@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	iamtypes "github.com/kernel-contrib/iam/types"
 	"go.edgescale.dev/kernel/sdk"
 )
 
@@ -38,7 +39,8 @@ func parseDate(s string) (time.Time, error) {
 // ── IAM Reader interface ──────────────────────────────────────────────────────
 
 // iamMemberReader is the expected interface from the IAM module's reader.
-// We define it locally to avoid importing the IAM module directly.
+// We define it locally to avoid importing the root IAM module directly.
+// Only iam/types is imported (shared structs, no cycle risk).
 type iamMemberReader interface {
-	GetMemberUserID(ctx context.Context, tenantMemberID uuid.UUID) (uuid.UUID, error)
+	GetMembersByIDs(ctx context.Context, tenantID uuid.UUID, memberIDs []uuid.UUID) (map[uuid.UUID]iamtypes.TenantMember, error)
 }
