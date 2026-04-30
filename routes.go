@@ -10,11 +10,7 @@ func (m *Module) RouteHandlers() []sdk.RouteHandler {
 }
 
 func (m *Module) registerClientRoutes(r *sdk.Router) {
-	// ── Global routes (not tenant-scoped) ─────────────────────────────────
-	// My Schedule — employee self-view (any authenticated user).
-	r.GET("/my-schedule", sdk.Self, m.handleMySchedule)
-
-	// ── Tenant-scoped routes ──────────────────────────────────────────────
+	// Tenant-scoped routes
 	t := r.Tenant()
 
 	// Shifts CRUD.
@@ -37,4 +33,7 @@ func (m *Module) registerClientRoutes(r *sdk.Router) {
 
 	// Roster (manager view).
 	t.GET("/roster", "shifts.roster.read", m.handleGetRoster)
+
+	// My Schedule - employee self-view (authenticated, tenant-scoped).
+	t.GET("/my-schedule", sdk.Self, m.handleMySchedule)
 }

@@ -32,6 +32,7 @@ type updateShiftRequest struct {
 	StartDate        *string        `json:"start_date"`
 	EndDate          *string        `json:"end_date"`
 	WorkingDays      *[]int         `json:"working_days"`
+	SpecificDates    *[]string      `json:"specific_dates"`
 	StartTime        *string        `json:"start_time"`
 	EndTime          *string        `json:"end_time"`
 	WorkLocationType *string        `json:"work_location_type" binding:"omitempty,oneof=onsite remote hybrid field"`
@@ -194,6 +195,9 @@ func (m *Module) handleUpdateShift(c *gin.Context) {
 	}
 	if req.WorkingDays != nil {
 		input.WorkingDays = req.WorkingDays
+	}
+	if req.SpecificDates != nil {
+		input.SpecificDates = req.SpecificDates
 	}
 	if req.StartTime != nil {
 		input.StartTime = req.StartTime
@@ -511,6 +515,8 @@ func (m *Module) handleGetRoster(c *gin.Context) {
 }
 
 func (m *Module) handleMySchedule(c *gin.Context) {
+	tid := tenantID(c)
+
 	var q myScheduleQuery
 	if !sdk.BindQuery(c, &q) {
 		return
@@ -527,21 +533,9 @@ func (m *Module) handleMySchedule(c *gin.Context) {
 		return
 	}
 
-	// For the self-schedule endpoint, we need the internal_user_id and to find
-	// which tenant(s) the user belongs to. This is resolved from context.
 	internalUserID := c.MustGet("internal_user_id").(uuid.UUID)
 
-	// The my-schedule endpoint is global (not tenant-scoped), so we need to
-	// query all tenants the user belongs to. For now, we resolve via the
-	// tenant_id if present, or return an error.
-	tid, exists := c.Get("tenant_id")
-	if !exists {
-		sdk.Error(c, sdk.BadRequest("tenant_id is required for my-schedule"))
-		return
-	}
-	tenantUUID := tid.(uuid.UUID)
-
-	schedule, err := m.svc.GetMySchedule(c.Request.Context(), tenantUUID, internalUserID, startDate, endDate)
+	schedule, err := m.svc.GetMySchedule(c.Request.Context(), tid, internalUserID, startDate, endDate)
 	if err != nil {
 		sdk.FromError(c, err)
 		return

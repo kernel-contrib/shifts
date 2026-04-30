@@ -127,6 +127,7 @@ type UpdateShiftInput struct {
 	StartDate        *time.Time
 	EndDate          *time.Time
 	WorkingDays      *[]int
+	SpecificDates    *[]string
 	StartTime        *string
 	EndTime          *string
 	WorkLocationType *types.WorkLocationType
@@ -161,6 +162,13 @@ func (s *Service) UpdateShift(ctx context.Context, tenantID, id uuid.UUID, in Up
 			return nil, fmt.Errorf("shifts: marshal working days: %w", err)
 		}
 		updates["working_days"] = wdJSON
+	}
+	if in.SpecificDates != nil {
+		sdJSON, err := json.Marshal(*in.SpecificDates)
+		if err != nil {
+			return nil, fmt.Errorf("shifts: marshal specific dates: %w", err)
+		}
+		updates["specific_dates"] = sdJSON
 	}
 	if in.StartTime != nil {
 		updates["start_time"] = *in.StartTime
