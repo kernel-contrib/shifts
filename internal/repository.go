@@ -101,6 +101,28 @@ func (r *Repository) SoftDeleteShift(ctx context.Context, tenantID, id uuid.UUID
 	})
 }
 
+// FindShiftsByIDs batch-fetches shifts by their IDs, scoped to a tenant.
+// Returns a map keyed by shift ID for efficient consumer lookups.
+func (r *Repository) FindShiftsByIDs(ctx context.Context, tenantID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]types.Shift, error) {
+	if len(ids) == 0 {
+		return make(map[uuid.UUID]types.Shift), nil
+	}
+
+	var shifts []types.Shift
+	err := r.db.WithContext(ctx).
+		Where("tenant_id = ? AND id IN ?", tenantID, ids).
+		Find(&shifts).Error
+	if err != nil {
+		return nil, fmt.Errorf("shifts: find shifts by ids: %w", err)
+	}
+
+	result := make(map[uuid.UUID]types.Shift, len(shifts))
+	for _, s := range shifts {
+		result[s.ID] = s
+	}
+	return result, nil
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Shift Members
 // ═══════════════════════════════════════════════════════════════════════════════

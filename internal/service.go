@@ -745,6 +745,12 @@ func (s *Service) ResolveShiftForDay(ctx context.Context, tenantID, tenantMember
 	return &results[0], nil
 }
 
+// GetShiftsByIDs returns a map of shifts keyed by their ID for the given tenant.
+// Used by cross-module readers that need to enrich records with shift metadata.
+func (s *Service) GetShiftsByIDs(ctx context.Context, tenantID uuid.UUID, shiftIDs []uuid.UUID) (map[uuid.UUID]types.Shift, error) {
+	return s.repo.FindShiftsByIDs(ctx, tenantID, shiftIDs)
+}
+
 // GetShiftsStartingWithinHour returns all resolved shifts that start within
 // the next 60 minutes. Used by the reminders cron.
 func (s *Service) GetShiftsStartingWithinHour(ctx context.Context, now time.Time) ([]types.ResolvedShift, error) {
