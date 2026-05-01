@@ -30,6 +30,12 @@ type ShiftsReader interface {
 	// that start within the next 60 minutes from `now`.
 	// Used by the reminders cron to determine which notifications to fire.
 	GetShiftsStartingWithinHour(ctx context.Context, now time.Time) ([]types.ResolvedShift, error)
+
+	// GetShiftsByIDs batch-fetches shift definitions by their IDs for a tenant.
+	// Returns a map keyed by shift ID for O(1) lookups. IDs that don't exist
+	// (or belong to a different tenant) are silently omitted from the result.
+	// Used by consumer modules (e.g. attendance) to enrich records with shift metadata.
+	GetShiftsByIDs(ctx context.Context, tenantID uuid.UUID, shiftIDs []uuid.UUID) (map[uuid.UUID]types.Shift, error)
 }
 
 // ── Implementation ────────────────────────────────────────────────────────────
@@ -45,4 +51,8 @@ func (r *shiftsReader) GetShiftForDay(ctx context.Context, tenantID, memberID uu
 
 func (r *shiftsReader) GetShiftsStartingWithinHour(ctx context.Context, now time.Time) ([]types.ResolvedShift, error) {
 	return r.svc.GetShiftsStartingWithinHour(ctx, now)
+}
+
+func (r *shiftsReader) GetShiftsByIDs(ctx context.Context, tenantID uuid.UUID, shiftIDs []uuid.UUID) (map[uuid.UUID]types.Shift, error) {
+	return r.svc.GetShiftsByIDs(ctx, tenantID, shiftIDs)
 }

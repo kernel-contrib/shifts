@@ -492,6 +492,10 @@ resolved, err := reader.GetShiftForDay(ctx, tenantID, memberID, date)
 
 // Get all shifts starting within the next hour (used by reminders)
 upcoming, err := reader.GetShiftsStartingWithinHour(ctx, time.Now())
+
+// Batch-fetch shift definitions by ID (e.g. to enrich attendance records)
+shiftMap, err := reader.GetShiftsByIDs(ctx, tenantID, []uuid.UUID{shiftID1, shiftID2})
+// shiftMap is keyed by shift ID; missing/cross-tenant IDs are silently omitted.
 ```
 
 The `ResolvedShift` includes pre-resolved `GraceWindow` values - the attendance module doesn't need to know about the cascade.
