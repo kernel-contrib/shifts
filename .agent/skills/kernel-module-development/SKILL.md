@@ -861,7 +861,7 @@ package {name}
 
 import (
     "io/fs"
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
     "go.edgescale.dev/kernel-contrib/{name}/migrations"
 )
 
@@ -937,7 +937,7 @@ package {name}
 
 import (
     "github.com/google/uuid"
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
 )
 
 type {Entity} struct {
@@ -981,7 +981,7 @@ package {name}
 import (
     "context"
     "log/slog"
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
 )
 
 type Service struct {
@@ -1004,7 +1004,7 @@ package {name}
 import (
     "github.com/gin-gonic/gin"
     "github.com/google/uuid"
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
 )
 
 func (m *Module) handleList(c *gin.Context) {

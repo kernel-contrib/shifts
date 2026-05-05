@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/edgescaleDev/kernel/sdk"
 	"github.com/google/uuid"
 	"github.com/kernel-contrib/shifts/types"
-	"go.edgescale.dev/kernel/sdk"
 )
 
 // Service provides business logic for the shifts module.

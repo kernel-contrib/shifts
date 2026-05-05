@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/edgescaleDev/kernel/sdk"
 	"github.com/google/uuid"
 	"github.com/kernel-contrib/shifts/internal"
 	"github.com/kernel-contrib/shifts/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.edgescale.dev/kernel/sdk"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

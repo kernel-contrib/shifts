@@ -4,9 +4,9 @@ import (
 	"io/fs"
 	"time"
 
+	"github.com/edgescaleDev/kernel/sdk"
 	"github.com/kernel-contrib/shifts/internal"
 	"github.com/kernel-contrib/shifts/migrations"
-	"go.edgescale.dev/kernel/sdk"
 )
 
 // Module is the main entry point for the shifts kernel module.

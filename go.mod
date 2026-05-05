@@ -3,11 +3,11 @@ module github.com/kernel-contrib/shifts
 go 1.26.1
 
 require (
+	github.com/edgescaleDev/kernel v0.3.3
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
 	github.com/kernel-contrib/iam v0.0.0-20260430012052-a0812526fc09
 	github.com/stretchr/testify v1.11.1
-	go.edgescale.dev/kernel v0.2.0
 	gorm.io/driver/sqlite v1.6.0
 	gorm.io/gorm v1.31.1
 )
@@ -43,6 +43,7 @@ require (
 	github.com/redis/go-redis/v9 v9.18.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
+	go.edgescale.dev/kernel v0.2.0 // indirect
 	go.mongodb.org/mongo-driver/v2 v2.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/arch v0.22.0 // indirect

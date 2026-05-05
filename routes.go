@@ -1,6 +1,6 @@
 package shifts
 
-import "go.edgescale.dev/kernel/sdk"
+import "github.com/edgescaleDev/kernel/sdk"
 
 // RouteHandlers returns the route handler registrations for this module.
 func (m *Module) RouteHandlers() []sdk.RouteHandler {

@@ -91,7 +91,7 @@ package notes
 import (
     "io/fs"
 
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
 )
 
 type Module struct{}
@@ -192,7 +192,7 @@ package notes
 
 import (
     "github.com/google/uuid"
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
 )
 
 type Note struct {
@@ -307,7 +307,7 @@ import (
     "fmt"
     "io/fs"
 
-    "go.edgescale.dev/kernel/sdk"
+    "github.com/edgescaleDev/kernel/sdk"
     "go.edgescale.dev/module-notes/migrations"
 )
 

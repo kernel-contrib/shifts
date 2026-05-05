@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/edgescaleDev/kernel/sdk"
 	"github.com/google/uuid"
 	"github.com/kernel-contrib/shifts/types"
-	"go.edgescale.dev/kernel/sdk"
 	"gorm.io/gorm"
 )
 
