@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/edgescaleDev/kernel/sdk"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	iamtypes "github.com/kernel-contrib/iam/types"
-	"go.edgescale.dev/kernel/sdk"
 )
 
 // ── Context helpers ───────────────────────────────────────────────────────────
