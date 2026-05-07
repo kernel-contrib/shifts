@@ -12,12 +12,12 @@ CREATE TABLE shifts (
     start_date DATE,
     end_date DATE,
     -- Days of week (ISO: 1=Mon, 7=Sun). Stored as smallint array.
-    working_days SMALLINT [] NOT NULL DEFAULT '{}',
+    working_days JSONB NOT NULL DEFAULT '[]',
     -- Explicit date list for non-contiguous specific_dates shifts.
     -- When populated, the shift is active ONLY on these exact dates.
     -- Overrides start_date/end_date and working_days.
     -- Example: ['2026-05-05', '2026-05-08', '2026-06-03']
-    specific_dates DATE [] NOT NULL DEFAULT '{}',
+    specific_dates JSONB NOT NULL DEFAULT '[]',
     -- Clock times (NOT timestamps - date is resolved at query time).
     -- If end_time < start_time → overnight shift.
     start_time TIME NOT NULL,
