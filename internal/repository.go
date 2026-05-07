@@ -61,11 +61,42 @@ func (r *Repository) FindShiftByIDWithAssociations(ctx context.Context, tenantID
 }
 
 // ListShifts returns a paginated list of shifts for a tenant.
-func (r *Repository) ListShifts(ctx context.Context, tenantID uuid.UUID, page sdk.PageRequest) (*sdk.PageResult[types.Shift], error) {
-	return sdk.Paginate[types.Shift](
-		r.db.WithContext(ctx).Model(&types.Shift{}).Where("tenant_id = ?", tenantID),
-		page,
-	)
+// If date is provided, only shifts active on that date are returned.
+func (r *Repository) ListShifts(ctx context.Context, tenantID uuid.UUID, page sdk.PageRequest, date *time.Time) (*sdk.PageResult[types.Shift], error) {
+	query := r.db.WithContext(ctx).Model(&types.Shift{}).Where("tenant_id = ?", tenantID)
+
+	if date != nil {
+		d := time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+
+		// ISO weekday: Monday=1 ... Sunday=7.
+		isoWeekday := int(d.Weekday())
+		if isoWeekday == 0 {
+			isoWeekday = 7
+		}
+		dateStr := d.Format("2006-01-02")
+
+		// A shift is active on this date if:
+		//   permanent:       weekday in working_days AND within start/end range
+		//   specific_dates:  date in specific_dates list OR within start/end range
+		query = query.Where(`(
+			(shift_type = 'permanent'
+				AND working_days @> ?::jsonb
+				AND (start_date IS NULL OR start_date <= ?)
+				AND (end_date IS NULL OR end_date >= ?))
+			OR
+			(shift_type = 'specific_dates'
+				AND (specific_dates @> ?::jsonb
+					OR (start_date IS NOT NULL AND end_date IS NOT NULL
+						AND start_date <= ? AND end_date >= ?)))
+		)`,
+			fmt.Sprintf("[%d]", isoWeekday), // working_days @> '[1]'
+			dateStr, dateStr, // permanent range check
+			fmt.Sprintf("%q", dateStr), // specific_dates @> '"2026-05-10"'
+			dateStr, dateStr, // specific_dates range check
+		)
+	}
+
+	return sdk.Paginate[types.Shift](query, page)
 }
 
 // UpdateShift patches a shift by ID.

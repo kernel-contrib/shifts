@@ -569,7 +569,7 @@ func TestTenantIsolation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result, err := h.svc.ListShifts(ctx, tenantA, sdk.PageRequest{Page: 1, PerPage: 10})
+	result, err := h.svc.ListShifts(ctx, tenantA, sdk.PageRequest{Page: 1, PerPage: 10}, nil)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), result.Meta.TotalCount)
 	assert.Equal(t, "A's Shift", result.Items[0].Title)

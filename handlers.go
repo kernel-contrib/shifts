@@ -80,7 +80,18 @@ func (m *Module) handleListShifts(c *gin.Context) {
 	tid := tenantID(c)
 	page := sdk.ParsePageRequest(c)
 
-	result, err := m.svc.ListShifts(c.Request.Context(), tid, page)
+	// Optional date filter: ?date=2026-05-10
+	var dateFilter *time.Time
+	if raw := c.Query("date"); raw != "" {
+		d, err := parseDate(raw)
+		if err != nil {
+			sdk.Error(c, sdk.BadRequest("invalid date format, expected YYYY-MM-DD"))
+			return
+		}
+		dateFilter = &d
+	}
+
+	result, err := m.svc.ListShifts(c.Request.Context(), tid, page, dateFilter)
 	if err != nil {
 		sdk.FromError(c, err)
 		return

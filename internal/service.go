@@ -116,8 +116,9 @@ func (s *Service) GetShiftByID(ctx context.Context, tenantID, id uuid.UUID) (*ty
 }
 
 // ListShifts returns a paginated list of shifts for a tenant.
-func (s *Service) ListShifts(ctx context.Context, tenantID uuid.UUID, page sdk.PageRequest) (*sdk.PageResult[types.Shift], error) {
-	return s.repo.ListShifts(ctx, tenantID, page)
+// If date is provided, only shifts active on that date are returned.
+func (s *Service) ListShifts(ctx context.Context, tenantID uuid.UUID, page sdk.PageRequest, date *time.Time) (*sdk.PageResult[types.Shift], error) {
+	return s.repo.ListShifts(ctx, tenantID, page, date)
 }
 
 // UpdateShiftInput is a partial update for shift fields.
