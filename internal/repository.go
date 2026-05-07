@@ -467,3 +467,28 @@ func (r *Repository) FindAllActiveAssignmentsInRange(
 	}
 	return members, nil
 }
+
+// FindShiftsActiveInRange returns all shifts for a tenant whose date range
+// overlaps the query range. Day-of-week / specific-date filtering is done
+// in the service layer.
+func (r *Repository) FindShiftsActiveInRange(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	startDate, endDate time.Time,
+	shiftID *uuid.UUID,
+) ([]types.Shift, error) {
+	query := r.db.WithContext(ctx).
+		Where("tenant_id = ?", tenantID).
+		Where("(start_date IS NULL OR start_date <= ?)", endDate).
+		Where("(end_date IS NULL OR end_date >= ?)", startDate)
+
+	if shiftID != nil {
+		query = query.Where("id = ?", *shiftID)
+	}
+
+	var shifts []types.Shift
+	if err := query.Find(&shifts).Error; err != nil {
+		return nil, fmt.Errorf("shifts: find shifts active in range: %w", err)
+	}
+	return shifts, nil
+}

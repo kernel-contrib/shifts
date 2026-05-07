@@ -542,6 +542,7 @@ const MaxRosterDays = 42
 
 // GetRoster returns the resolved roster for all members in a tenant
 // within a date range. Applies override resolution hierarchy.
+// Shifts without member assignments are also included (with nil member fields).
 func (s *Service) GetRoster(
 	ctx context.Context,
 	tenantID uuid.UUID,
@@ -559,7 +560,18 @@ func (s *Service) GetRoster(
 		return nil, err
 	}
 
-	return s.resolveAssignments(ctx, assignments, startDate, endDate)
+	resolved, err := s.resolveAssignments(ctx, assignments, startDate, endDate)
+	if err != nil {
+		return nil, err
+	}
+
+	// Also include shifts that have zero member assignments.
+	unassigned, err := s.resolveUnassignedShifts(ctx, tenantID, startDate, endDate, shiftID, assignments)
+	if err != nil {
+		return nil, err
+	}
+
+	return append(resolved, unassigned...), nil
 }
 
 // GetMySchedule returns the resolved schedule for a single member.
@@ -816,8 +828,121 @@ func (s *Service) GetShiftsStartingWithinHour(ctx context.Context, now time.Time
 
 	return resolved, nil
 }
-
 // ── internal ──────────────────────────────────────────────────────────────────
+
+// resolveUnassignedShifts generates roster entries for shifts that have zero
+// member assignments in the date range. These entries have nil member fields
+// so the UI can still display the shift definition on the calendar.
+func (s *Service) resolveUnassignedShifts(
+	ctx context.Context,
+	tenantID uuid.UUID,
+	startDate, endDate time.Time,
+	shiftID *uuid.UUID,
+	existingAssignments []types.ShiftMember,
+) ([]types.ResolvedShift, error) {
+	// Collect shift IDs that already have assignments.
+	assignedShiftIDs := make(map[uuid.UUID]bool)
+	for _, a := range existingAssignments {
+		assignedShiftIDs[a.ShiftID] = true
+	}
+
+	// Find all shifts for the tenant (optionally filtered by shiftID).
+	allShifts, err := s.repo.FindShiftsActiveInRange(ctx, tenantID, startDate, endDate, shiftID)
+	if err != nil {
+		return nil, err
+	}
+
+	var resolved []types.ResolvedShift
+
+	for _, shift := range allShifts {
+		if assignedShiftIDs[shift.ID] {
+			continue // Already resolved via member assignments.
+		}
+
+		shiftDays := ParseWorkingDays(shift.WorkingDays)
+		specificDates := ParseSpecificDates(shift.SpecificDates)
+		useSpecificDates := shift.HasSpecificDates()
+
+		overrides, err := s.repo.FindOverridesForShiftInRange(ctx, shift.ID, startDate, endDate)
+		if err != nil {
+			return nil, err
+		}
+
+		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+			day := time.Date(d.Year(), d.Month(), d.Day(), 0, 0, 0, 0, time.UTC)
+
+			// Check shift date boundaries.
+			if shift.StartDate != nil && day.Before(truncateDate(*shift.StartDate)) {
+				continue
+			}
+			if shift.EndDate != nil && day.After(truncateDate(*shift.EndDate)) {
+				continue
+			}
+
+			// Check if this day is active for the shift.
+			active := false
+			if shift.ShiftType == types.ShiftTypeSpecificDates {
+				if useSpecificDates {
+					active = IsSpecificDate(specificDates, day)
+				} else {
+					// Range mode - already checked boundaries above.
+					active = IsWorkingDay(shiftDays, day)
+				}
+			} else {
+				active = IsWorkingDay(shiftDays, day)
+			}
+
+			// Check for whole-shift overrides (no member to resolve against).
+			override := ResolveOverride(overrides, day, uuid.Nil)
+
+			if override != nil {
+				rs := types.ResolvedShift{
+					ShiftID:          shift.ID,
+					ShiftTitle:       shift.Title,
+					TenantID:         shift.TenantID,
+					Date:             day,
+					StartTime:        shift.StartTime,
+					EndTime:          shift.EndTime,
+					IsDayOff:         override.IsDayOff,
+					IsOvernight:      shift.IsOvernight(),
+					WorkLocationType: shift.WorkLocationType,
+					Metadata:         shift.Metadata,
+					OverrideID:       &override.ID,
+					OverrideReason:   override.Reason,
+					GraceWindow:      s.resolveGraceWindow(shift.Metadata, shift.TenantID),
+				}
+				if override.NewStartTime != nil {
+					rs.StartTime = *override.NewStartTime
+				}
+				if override.NewEndTime != nil {
+					rs.EndTime = *override.NewEndTime
+				}
+				rs.IsOvernight = rs.EndTime < rs.StartTime
+				resolved = append(resolved, rs)
+				continue
+			}
+
+			if !active {
+				continue
+			}
+
+			resolved = append(resolved, types.ResolvedShift{
+				ShiftID:          shift.ID,
+				ShiftTitle:       shift.Title,
+				TenantID:         shift.TenantID,
+				Date:             day,
+				StartTime:        shift.StartTime,
+				EndTime:          shift.EndTime,
+				IsOvernight:      shift.IsOvernight(),
+				WorkLocationType: shift.WorkLocationType,
+				Metadata:         shift.Metadata,
+				GraceWindow:      s.resolveGraceWindow(shift.Metadata, shift.TenantID),
+			})
+		}
+	}
+
+	return resolved, nil
+}
 
 func (s *Service) publish(ctx context.Context, subject string, payload map[string]any) {
 	if s.bus == nil {
